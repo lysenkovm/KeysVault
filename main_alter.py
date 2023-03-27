@@ -5,8 +5,19 @@ import sqlite3
 ##import main_menu_class
 
 
+class Application:
+    def __init__(self):
+        # Общий объект настроек
+        self.settings = Settings()
+
+
+
+
 # Открытие фБД через исключения
 def main():
+
+    app = Application()
+
     while True:
         try:
             config_file_path = Path(f'./{CF_NAME}')

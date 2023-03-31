@@ -2,73 +2,62 @@ from common import *
 import open_create_db_module as ocdb_module
 from pathlib import Path
 import sqlite3
+from cmenu_ import *
 ##import main_menu_class
 
 
 class Application:
     def __init__(self):
-        # Общий объект настроек
-        self.settings = Settings()
+        # Созание общего объекта настроек
+        '''app.settings.config_file_path
+        app.settings.db_aes_path_key
+        app.settings.password = None'''
+        self.settings = Settings(self)
+        # Созание общего объекта упр-я БД, в котором ничего пока нет
+        self.db = DataBase(self)
+        self.fill_db_aes_path()
+        '''Расшифровать фБД_зашифр в фБД_расшифр, подключиться к фБД_расшифр
+        self.connection - соединение с БД,
+        self.cursor - курсор'''
+        self.db_decrypt_open_connect()
+        # Следующие действия
 
 
+    # Инициализировать атрибуты объекта Settings: db_aes_path, db_decr_path
+    def fill_db_aes_path(self):
+        # Вызов метода файла настроек для получения пути к фБД_зашифр
+        self.settings.get_db_aes_path()
+
+
+    '''Расшифровать фБД_зашифр в фБД_расшифр, подключиться к фБД_расшифр
+    connection - соединение с БД,
+    cursor - курсор'''
+    def db_decrypt_open_connect(self):
+        self.db.decrypt_file()
+        self.db.open_db_decr_file()
+
+
+    # Вызов меню 'Открыть/выбрать файл БД'
+    # USES
+    def open_create_db(self):
+        # Вызвать меню создания/открытия файла БД
+        title = 'Открыть/выбрать файл БД'
+        prologue = 'Внимание! Файл зашифрованной БД не найден!'
+        menu_open_create_db = CMenu(self, title, prologue)
+        menu_open_create_db.add_item('Открыть существующий файл БД', 1,
+                                     self.settings.select_db_path)
+        menu_open_create_db.add_item('Создать новый файл БД', 2,
+                                     self.db.create_db)
+        while (db_aes_path := menu_open_create_db.show()) == '_back_':
+            continue
 
 
 # Открытие фБД через исключения
 def main():
-
+    # Application-object with Settings- and DataBase-objects
     app = Application()
+    return app
 
-    while True:
-        try:
-            config_file_path = Path(f'./{CF_NAME}')
-            connection, cursor = ocdb_module.open_db_from_read_settings(config_file_path)
-
-        except FileNotFoundError as error:
-        # (1) конф.файл отсутствует
-            if error.filename == str(config_file_path):
-                print(CF_EXISTS_ERROR[0])
-                with open(config_file_path, 'wt') as config_file:
-                    config_file.write(f'{CF_DB_AES_PATH_KEY} = ' + '\n')
-                print(CF_EXISTS_ERROR[1])
-                print(CF_DB_AES_PATH_KEY_ERROR[1])
-        # (2) Не найден ключ пути к фБД
-        except IndexError as error:
-            print(CF_DB_AES_PATH_KEY_ERROR[0])
-            with open(config_file_path, 'at') as config_file:
-                # Записать пустой ключ в конф.файл
-                config_file.write(f'{CF_DB_AES_PATH_KEY} = ' + '\n')
-            print(CF_DB_AES_PATH_KEY_ERROR[1])
-        except ValueError as error:
-        # (3) Не найден фБД_зашифр
-            if error.args[0] in ('Unable to read input file.',
-                                 "WindowsPath('.') has an empty name"):
-                print(CF_DB_AES_PATH_VAL_ERROR[0])
-                # Создать / выбрать фБД
-                print(CF_DB_AES_PATH_VAL_ERROR[1])
-                ocdb_module.open_create_db()
-        # (3) Введен неверный пароль
-            if error.args[0] == 'Wrong password (or file is corrupted).':
-                print(DB_AES_PASSWORD_ERROR[0])
-                print(DB_AES_PASSWORD_ERROR[1])
-        except sqlite3.OperationalError as error:
-        # (4) фБД_дешифр не может быть прочитан
-            if error.args[0] == 'unable to open database file':
-                print(DB_SQLITE3_ERROR[0])
-                # Создать / выбрать фБД / ввести пароль повторно
-                print(DB_SQLITE3_ERROR[1])
-                ocdb_module.open_create_db()
-        except sqlite3.DatabaseError as error:
-        # (4) фБД_дешифр не может быть прочитан
-            if error.args[0] == 'file is not a database':
-                print(DB_SQLITE3_ERROR[0])
-                # Создать / выбрать фБД / ввести пароль повторно
-                print(DB_SQLITE3_ERROR[1])
-                ocdb_module.open_create_db()
-        else:
-            return  # временно
-    # Действие <по завершении> работы приложения - посмотреть в Интернете
-##    # Зашифровать файл БД
-##    crypta_.encrypt_file(db_path_encrypted, db_aes_path)
 
 if __name__ == '__main__':
-    main()
+    app = main()

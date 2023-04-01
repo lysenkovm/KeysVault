@@ -29,13 +29,12 @@ DB_LOAD_STAGES_MESSAGES = [CF_EXISTS_ERROR, CF_DB_AES_PATH_KEY_ERROR,
                            CF_DB_AES_PATH_VAL_ERROR, DB_AES_PASSWORD_ERROR,
                            DB_SQLITE3_ERROR]
 
-RESTRICTED_PATH_SYMBOLS = set("'*+,./:;<=>?[\\]|«")
+RESTRICTED_PATH_SYMBOLS = set("'*+,;<=>?[]|«")
 
 
 def say_my_name():
     stack = traceback.extract_stack()
     print('Print from {}'.format(stack[-2][2]))
-
 
 
 def app_message(title_type, *args, **kwargs):
@@ -64,15 +63,18 @@ def path_checks(path_str, checks):
     # Вернуть False и текст ошибки
     true_result = (True, '')
     checks_dict = {
-        'symbols': lambda p: (False, 'Имя файла содержит недопустимые ' +
-                              'символы') if RESTRICTED_PATH_SYMBOLS &
-                                            set(str(p)) else true_result,
+        'symbols': lambda p: (False, 'Имя файла содержит недопустимые'
+                                     ' символы: ' +
+                                     f'{RESTRICTED_PATH_SYMBOLS & set(str(p))}')
+                   if RESTRICTED_PATH_SYMBOLS & set(str(p)) else true_result,
         'empty': lambda p: (False, 'Вы ввели пустой путь')
-              if p.parent == Path('.') else true_result,
+              if p == Path('.') else true_result,
         'extention': lambda p: (False, 'Имя файла содержит расширение ' +
                                 '(точку)') if path.suffix else true_result,
         'exists': lambda p: (False, 'Введенный путь не существует')
               if not p.exists() else true_result,
+        'not_exists': lambda p: (False, 'Введенный путь уже существует')
+              if p.exists() else true_result,
         'dir': lambda p: (False, 'Введенный путь не является папкой')
               if not p.is_dir() else true_result,
         'file': lambda p: (False, 'Введенный путь не является файлом')
@@ -89,6 +91,7 @@ def path_checks(path_str, checks):
                            
 class Settings:
     def __init__(self, application):
+        
         self.application = application
         self.config_file_path = self.get_config_file_path(Path('./settings.cfg'))
         self.db_aes_path_key = 'db_aes_path'
@@ -96,6 +99,7 @@ class Settings:
 
     # Создание КонФайла при необходимости и возврат пути к нему
     def get_config_file_path(self, config_file_path):
+        
         if not config_file_path.exists():
             app_message('app', *CF_EXISTS_ERROR, sep='\n')
             open(config_file_path, 'wt').close()
@@ -103,6 +107,7 @@ class Settings:
 
     # Получить из конф.файла значение по ключу
     def get_value_by_key(self, key):
+        
         key_re = re.compile(rf'\A\s*{key}\s*=\s*')
         with open(self.config_file_path, 'rt') as config_file:
             # Возм.ошибка - Не найден ключ к фБД_зашифр
@@ -112,6 +117,7 @@ class Settings:
             return ''
 
     def set_value_by_key(self, key, val):
+        
         key_re = re.compile(rf'\A\s*{key}\s*=\s*')
         # Если в
         with open(self.config_file_path, 'rt') as config_file_read:
@@ -135,19 +141,26 @@ class Settings:
     '''
     def get_db_aes_path(self):
         # Инициализировать переменные путей к фБД_зашифр, фБД_расшифр из КонфФайла
+        # (1) Получить значение пути_фБД_зашифр по ключу
         db_aes_path = Path(self.get_value_by_key(self.db_aes_path_key))
+        print(db_aes_path)
         '''Проверка и исправления ОШИБОК:
         - не является текущим путем,
         - существует ли путь,
         - является ли путь файлом,
         '''
-        if (db_aes_path == Path(os.curdir)) or (not db_aes_path.exists()) or \
-                (not db_aes_path.is_file()):
+        # (2) Проверить путь_фБД_зашифр, полученный по ключу
+        check_results = path_checks(db_aes_path, ('empty', 'exists', 'file'))
+        if not check_results[0]:
+            # (2.1) Вызвать меню_Выбора/Создания_фБД_зашифр
+            app_message(check_results[1])
             self.application.open_create_db()
         else:
+            # (2.2) Инициализировать переменные путей к фБД
             self.db_aes_path = db_aes_path
             self.db_decr_path = self.db_aes_path.with_stem(
                     self.db_aes_path.stem + '_decr')
+
 
     def set_db_aes_path(self, db_aes_path):
         # Записать путь к фБД_зашифр в конф.файл
@@ -186,6 +199,14 @@ class DataBase:
     def __init__(self, application):
         self.application = application
         self.settings = self.application.settings
+        self.connection = None
+        self.cursor = None
+
+    def close_cursor_connection(self):
+        self.cursor.close()
+        self.connection.close()
+        self.connection = None
+        self.cursor = None
 
     def encrypt_file(self):
         src = self.settings.db_decr_path
@@ -274,19 +295,29 @@ class DataBase:
             # Объединение пути к папке и имени файла, добавление расширения 'sqlite'
             db_aes_path = (db_aes_folder_path / db_aes_stem_name).with_suffix('.sqlite')
             # Если файл уже существует, то повторить всю функцию
-            if not path_checks(db_aes_path, ('exists',))[0]:
-                print('Файл с таким именем уже существует. Повторите ввод')
+            # Условие вернет True, если файл существует, False - если нет
+            if path_checks(db_aes_path, ('exists',))[0]:
+                app_message('db', 'Файл с таким именем уже существует. Повторите ввод')
                 # Перезапуск тела цикла в новой итерации
                 continue
             else:
+                print(1)
                 # Инициализировать имена путей к фБД_зашифр, фБД_расшифр
                 # Сохранить путь к фБД_зашифр в конф.файл
                 self.settings.set_db_aes_path(db_aes_path)
                 # Создать фБД_расшифр
+                print(2)
                 self.open_db_decr_file()
                 # Инициализировать структуру фБД_расшифр
+                print(3)
                 self.init_db()
                 # Зашифровать фБД_расшифр в фБД_зашифр
+                print(4)
                 self.encrypt_file()
+                # Закрыть соединение с фБД_расшифр
+                print(5)
+                self.close_cursor_connection()
                 # Удалить фБД_расшифр
+                print(6)
+                self.settings.db_decr_path.unlink()
                 return

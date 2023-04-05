@@ -2,36 +2,30 @@ import sys
 import keyboard
 
 
+def app_message(title_type, *args, **kwargs):
+    if title_type == 'app':
+        title = 'Pass Vault'
+    elif title_type == 'db':
+        title = 'Pass Vault - Data Base'
+    title_marked = title.rjust(79 // 2 + len(title) // 2,
+                               '-').ljust(79, '-')
+    print(title_marked)
+    # args = ['' + str(arg) for arg in args]
+    print(*args, **kwargs, end='\n\n')
+
+
 def enframe(t):
-
-    def get_left_center_right(border_len, symb):
-        symbols = {'/': '\\', '\\': '/'}
-        return (border_len // 2 * symb) + ('|' if border_len % 2 else '') + \
-               (border_len // 2 * symbols[symb])
-
     t = t.split('\n')  # Разбить текст на строки
-    # Будущая длина строки вместе с границами
-    border_len = len(max(t, key=len)) + 6
-    # t1 = []  # список строк текста с границами и пробелами
-    for row_n in range(len(t)):  # для каждого индекса строки в списке
-        left_spaces = 2 * ' '  # пробелы слева - всегда 2
-        # пробелы справа
-        right_spaces = (border_len - 4 - len(t[row_n])) * ' '
-        row = left_spaces + t[row_n] + right_spaces
-        if row_n <= len(t) // 2 - 1:
-            left, right = '\\', '/'
-        elif (row_n == len(t) // 2) and len(t) % 2:
-            left, right = '-', '-'
-        else:
-            left, right = '/', '\\'
-        t[row_n] = left + row + right
-    t_bordered = '\n'.join(t)
-    return '\n'.join([get_left_center_right(border_len, '\\'), t_bordered,
-                      get_left_center_right(border_len, '/')])
-
+    t = ['|  ' + row for row in t]
+    max_len_no_indent = len(max(t, key=len)) + 2
+    t = [row.ljust(max_len_no_indent, ' ') + '|' for row in t]
+    t.insert(0, '/' + '-' * (max_len_no_indent - 1) + '\\')
+    t.append('\\' + '-' * (max_len_no_indent - 1) + '/')
+    return '\n'.join(t)
 
 
 # answer_checker - функция
+# cmenu_.get_answer() => return: '_back_': str / answer: str
 def get_answer(text, answer_checker,
                error_text='Введено неверное значение. Повторите ввод.'):
     # Повторять вопрос, пока пользователь не введет 'back' или ответ,
@@ -39,8 +33,7 @@ def get_answer(text, answer_checker,
     while True:
         # 0
         # Вывести приглашение для ввода (вопрос)
-        print(text)
-        print('Возврат - "escape"')
+        app_message('app', text, 'Возврат - "escape"')
 
         # 1
         # Сигнальная метка выхода из цикла запроса ввода пользователя
@@ -62,6 +55,7 @@ def get_answer(text, answer_checker,
         if cue:
             return '_back_'
         # Проверка ответа функцией 'answer_checker'
+        print('answer', answer)
         check_status, error_text = answer_checker(answer)
         # Если ответ прошёл проверку функцией
         if check_status:
@@ -70,7 +64,7 @@ def get_answer(text, answer_checker,
         # Если ответ не прошёл проверку функцией
         else:
             # Вывести текст ошибки и повторить запрос
-            print(error_text)
+            app_message('app', error_text)
 
 
 
@@ -87,9 +81,10 @@ class CMenuItem:
         self.args = args
 
     def __str__(self):
-        text = f'({self.num})\t{self.text} - {str(self.func)}'
+        text = f'({self.num})  {self.text}'
         return text  # - {func} - потом удалить
 
+    # cmenu_.CMenuItem.launch_func() => self.func(*CMenuItem.args=())
     def launch_func(self):
         return self.func(*self.args)
 
@@ -106,13 +101,20 @@ class CMenu:
         self.back_item = back_item
         self.items = []
 
+    # cmenu_.CMenu.show()
+    # => cmenu_.CMenu.ask()
+    # => cmenu_.CMenuItem.launch_func()
+    # => cmenu_.CMenuItem.func(*CMenuItem.args=())
     def show(self):
         # Добавить элемент выхода из программы!
-        if tuple(filter(lambda x: x.text == '_exit_', self.items)):
+        if not tuple(filter(lambda x: x.text == '_exit_', self.items)):
             self.add_exit_item()
         # Вывод меню через вывод элементов и 'enframe()'
         print(self)
         # Возврат результата Вызова метода запроса ввода пользователя
+        # cmenu_.CMenu.ask()
+        # => cmenu_.CMenuItem.launch_func()
+        # => cmenu_.CMenuItem.func(*CMenuItem.args=())
         return self.ask()
 
     def __str__(self):
@@ -128,11 +130,16 @@ class CMenu:
 
     def add_exit_item(self):
         exit_num = len(self.items) + 1
-        self.items.append(CMenuItem('_exit_', str(exit_num), sys.exit))
-        
+        self.items.append(CMenuItem(self.parent, '_exit_', str(exit_num),
+                                    sys.exit))
+
+    # cmenu_.CMenu.ask()
+    # => cmenu_.CMenuItem.launch_func()
+    # => cmenu_.CMenuItem.func(*CMenuItem.args=())
     def ask(self):
         answer = input('Ввод: ')
-        item_selected = list(filter(lambda item: item.num == 
+        item_selected = list(filter(lambda item: item.num ==
                              answer, self.items))[0]
+        # cmenu_.CMenuItem.launch_func() => # => cmenu_.CMenuItem.func(*CMenuItem.args=())
         return item_selected.launch_func()  # Например, select_db_path() из open_create_db_module.py
-        # Реализовать: здесь обработка выбранного элемента
+

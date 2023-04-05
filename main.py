@@ -1,116 +1,201 @@
 from common import *
-import crypta_
-from cmenu_ import *
 import open_create_db_module as ocdb_module
 from pathlib import Path
-##import main_menu_class
+import sqlite3
+from cmenu_ import *
+import mmenu_db_module as mmenu
 
 
-
-def db_connect(dbase_path):
-    connection = sqlite3.connect(dbase_path)
-    cursor = connection.cursor()
-    return connection, cursor
-
-
-def main():
-    # Проверка наличия и при необх-ти создание конф.файла
-    config_file_path = Path(f'./{CF_NAME}')
-    # (2) Если путь к конфиг.файлу не существует
-    if not config_file_path.exists():
-        print('# (2) Если путь к конфиг.файлу не существует')
-        # Создать конфиг.файл и записать в него параметр пути к фБД
-        with open(config_file_path, 'wt') as config_file:
-            config_file.write(CF_DB_AES_PATH_KEY + '\n')
-    # (1) Если же путь существует, то проверить наличие ключа параметр фБД,
-    # и если нет, то добавить ключ
-    else:
-        print('# (1) Если же путь существует, то проверить наличие ключа параметр фБД,')
-        with open(config_file_path, 'r+') as config_file:
-            # Отфильтровать строку с ключом пути фБД
-            selection = list(filter(lambda line: line.startswith
-                                    (CF_DB_AES_PATH_KEY),
-                                    config_file.read().split('\n')))
-            # (1.2) Если ключ не найден, то вставить его в файл
-            if not selection:
-                print('# (1.2) Если ключ не найден, то вставить его в файл')
-                config_file.write('\n' + CF_DB_AES_PATH_KEY + '\n')
+class Application:
     
-    # (1.1) Получить значение пути к фБД по ключу
-    with open(config_file_path, 'r+') as config_file:
-        # Отфильтровать строку с ключом пути фБД
-        selection = list(filter(lambda line: line.startswith
-                                (CF_DB_AES_PATH_KEY),
-                                config_file.read().split('\n')))
-        db_aes_path_str = selection[0][len(CF_DB_AES_PATH_KEY)
-                                       :].strip(' \n\t=')
-        print('# (1.1) Получить значение пути к фБД по ключу')
-        print(db_aes_path_str)
+    def __init__(self):
+        self.settings = Settings(self)
+        # Получить путь из КонфФайла
+        # common.Settings.get_vaue_by_key() => (True, Path) / (False, 'Ключ не найден')
+        db_aes_path_from_CF_result = self.settings.get_value_by_key(
+              self.settings.db_aes_path_key)
+        if db_aes_path_from_CF_result[0]:
+            db_aes_path = Path(db_aes_path_from_CF_result[1])
+            open_db_result = self.open_db(db_aes_path)
+        else:
+            open_db_result = (False, 'Не найден конфигурационный файл или ключ')
+        if not open_db_result[0]:
+            # main_alter.Application.open_create_db() => (True, Path)
+            # main_alter.Application.open_db() => (False, str)
+            # / (False, error)
+            # / (False, 'Файл БД имеет не верную структуру')
+            # / (True, '')
+            while not open_db_result[0]:
+                print(open_db_result[1])
+                open_db_result = self.open_db(self.open_create_db()[1])
+            # При завершении цикла из консоли будет доступ к объекту 'app'
+        while True:
+            self.main_menu()
 
-    # (1.1.1.2) Проверить наличие фБД по пути
-    # и при отсутствии вызвать меню Откр/Созд фБД:
-    # - создать/открыть фБД,
-    # - записать в конф.файл путь,
-    # - получить путь фБД,
-    # - расшифровать фБД,
-    # - открыть фБД(расшифр)
-    # (1.1.1.2) Проверить наличие фБД по пути
-    if not db_aes_path_str or not Path(db_aes_path_str).exists():
+    # main_alter.Application.open_db() => (False, str)
+    # / (False, error)
+    # / (False, 'Файл БД имеет не верную структуру')
+    # / (True, '')
+    def open_db(self, db_aes_path):  # Path
+        # common.path_checks() => (True, '') / (False, str)
+        path_checks_result = path_checks(db_aes_path,
+                                         ('no_restr_symbols', 'not_empty',
+                                          'exists', 'file'))
+        if not path_checks_result[0]:
+            return path_checks_result
+        else:
+            db_file = DBFile(db_aes_path, self)  # Созд-е об-та фБД
+            # common.DBFile.decrypt_file() => (True, ''), (False, error)
+            db_decr_result = db_file.decrypt_file()  # Распаковка файла с получ-ем рез-та (возм.ошибки)
+            '''
+            ValueError: File is corrupted or not an AES Crypt (or pyAesCrypt) file. - переход в меню В/О фБД
+            ValueError: File is corrupted or not an AES Crypt (or pyAesCrypt) file. - переход в меню выбора д-я
+            '''
+            if not db_decr_result[0]:
+                # Позже дополнить Меню выбора действия, если пароль не подошёл
+                return db_decr_result  # Возможно с 'return' # Если файл - не зашифрованный
+            else:
+                # common.DBFile.db_connect() => (True, self.cursor.fetchall()) / (False, error)
+                # sqlite3.DatabaseError: file is not a database
+                db_connect_result = db_file.db_connect()
+                if not db_connect_result[0]:
+                    db_file.close_cursor_connection()
+                    db_file.db_decr_path.unlink()
+                    return db_connect_result
+                else:
+                    if db_connect_result[1] != TABLE_STRUCTURE:
+                        db_file.close_cursor_connection()
+                        db_file.db_decr_path.unlink()
+                        return False, 'Файл БД имеет не верную структуру'
+                    else:
+                        self.settings.set_value_by_key(self.settings.db_aes_path_key, str(db_aes_path))
+                        self.settings.set_db_aes_path(db_aes_path)  # Уст-ка атрибута db_aes_path
+                        self.db = db_file
+                        return True, ''
+
+    # Вызов меню 'Открыть/выбрать файл БД'
+    # main_alter.Application.open_create_db() => (True, Path)
+    def open_create_db(self):
         # Вызвать меню создания/открытия файла БД
         title = 'Открыть/выбрать файл БД'
         prologue = 'Внимание! Файл зашифрованной БД не найден!'
-        menu_open_create_db = CMenu(title, prologue)
-        menu_open_create_db.add_item(CMenuItem('Открыть существующий файл БД',
-                                               1, ocdb_module.select_db_path))
-        menu_open_create_db.add_item(CMenuItem('Создать новый файл БД',
-                                               2, ocdb_module.create_db))
-        menu_open_create_db.show()  # Открывает данное меню
-        
-    #### Не закрывать меню, пока фБД не будет создан или выбран
+        menu_open_create_db = CMenu(self, title, prologue)
+        menu_open_create_db.add_item('Открыть существующий файл БД', 1,
+                                     self.select_db_path)
+        menu_open_create_db.add_item('Создать новый файл БД', 2,
+                                     self.create_db)
+        # cmenu_.CMenu.show()
+        # => cmenu_.CMenu.ask()
+        # => cmenu_.CMenuItem.launch_func()
+        # => cmenu_.CMenuItem.func(*CMenuItem.args=())
+        # func == main_alter.Application.select_db_path() => '_back_': str / (True, db_aes_path: Path)
+        # func == main_alter.Application.create_db() => 'back': str / (True, db_aes_path: Path)
+        while (open_create_result := menu_open_create_db.show()) == '_back_':
+            continue
+        else:
+            return open_create_result  # (True, Path)
 
-    # Расшифровать файл БД
-    
+    # Выбор файла БД для открытия
+    # main_alter.Application.select_db_path() => '_back_': str / (True, db_aes_path: Path)
+    def select_db_path(self):
+        text = 'Введите путь к существующему файлу БД'
+        # Функция проверки ответа на существование пути и не '.'
+        variants = path_checks_carried('no_restr_symbols', 'not_empty',
+                                       'exists', 'file')
+        # Запрос ответа
+        # cmenu_.get_answer() => return: '_back_': str / answer: str
+        answer = get_answer(text, variants)
+        # Открыть файл и проверить, является ли он файлом БД
+        # Если ответ - '_back_', то вернуться в
+        if answer == '_back_':
+            return '_back_'
+        # Если фБД для открытия выбран
+        else:
+            db_aes_path = Path(answer)
+            # Инициализировать имена путей к фБД_зашифр, фБД_расшифр
+            # Сохранить путь к фБД_зашифр в конф.файл
+            return True, db_aes_path
+
+    # Создание БД
+    # main_alter.Application.create_db => 'back': str / (True, db_aes_path: Path)
+    def create_db(self):
+        while True:
+            # Ввод папки для сохранения БД
+            text = 'Введите путь к существующей папке'
+            # Функция проверки введенного пути к папке на:
+            # - не пустоту,
+            # - является папкой (одновременно проверяется, что существует),
+            variants = path_checks_carried('no_restr_symbols', 'not_empty',
+                                           'exists', 'dir')
+
+            # cmenu_.get_answer() => return: '_back_': str, answer: str
+            answer = get_answer(text, variants)
+            if answer == '_back_':
+                return '_back_'
+            db_aes_folder_path = Path(answer)
+
+            # Ввод имени файла для сохранения БД
+            text = 'Введите имя файла без расширения'
+            # Проверить на не существование файла, проверить на отсутствие расширения и пустоту
+            # Функция проверки введенного пути к папке на:
+            # - не пустоту,
+            # - отсутствие расширения
+            variants = path_checks_carried('no_restr_symbols', 'not_empty')
+
+            # cmenu_.get_answer() => return: '_back_': str, answer: str
+            answer = get_answer(text, variants)
+            if answer == '_back_':
+                return '_back_'
+            db_aes_stem_name = Path(answer)
+
+            # Объединение пути к папке и имени файла, добавление расширения 'sqlite'
+            db_aes_path = (db_aes_folder_path / db_aes_stem_name).with_suffix('.sqlite')
+            # Если файл уже существует, то повторить всю функцию
+            # Условие вернет True, если файл существует, False - если нет
+            if not path_checks(db_aes_path, ('not_exists', ))[0]:
+                app_message('db', 'Файл с таким именем уже существует. Повторите ввод')
+                # Перезапуск тела цикла в новой итерации
+                continue
+            else:
+                db = DBFile(db_aes_path, self)
+                db.init_db()
+                db.from_close_connection_to_exit(('close', 'encrypt', 'remove'))
+                return True, db_aes_path
+
+    def main_menu(self):
+        title = 'Основное меню'
+        prologue = 'Управление паролями'
+        menu = CMenu(self, title, prologue, exit_item=False)
+        menu.add_item('Выборка записей', 1, self.selection)
+        menu.add_item('Действия с записью', 2, self.entry_managing)
+        menu.add_item('Сменить БД', 3, self.open_create_db)
+        menu.add_item('Завершить работу с программой', 4,
+                      self.db.from_close_connection_to_exit,
+                      (('close', 'encrypt', 'remove', 'exit'),))
+        menu_result = menu.show()
 
     
+    def selection(self):
+        title = 'Выборка записей'
+        prologue = 'Вывод списка записей по параметрам'
+        menu = CMenu(self, title, prologue, exit_item=False)
+        menu.add_item('Логин', 1, self.selection)
+        menu.add_item('Действия с записью', 2, self.entry_managing)
+        menu.add_item('Сменить БД', 3, self.open_create_db)
+        menu.add_item('Завершить работу с программой', 4,
+                                     self.db.exit_app)
+        if menu.show() == '_back_':
+            self.db.exit_app()
 
+    def entry_managing(self):
+        pass
+    
+# Открытие фБД через исключения
+def main():
+    # Application-object with Settings- and DataBase-objects
+    app = Application()
+    return app
 
-    
-    
-##    while True:
-##        
-##        # Если путь из конфиг.файла не существует
-##        if not open_create_db_module_class.check_path_exists(db_aes_path):
-##            # Вызов меню создания/открытия файла БД
-##            prologue_text = 'Внимание! Файл зашифрованной БД не найден!'
-##            menu_open_create_db = open_create_db_module_class. \
-##                                  menu_open_create_db(prologue_text)
-##            menu_open_create_db.show()  # Открывает данное меню
-##        # Если путь из конфиг.файла ссылается на не sqlite3-файл
-##        elif not open_create_db_module_class.check_db_valid(db_aes_path):
-##            # Вызов меню создания/открытия файла БД
-##            prologue_text = '''Внимание! Файл БД не является файлом формата 'sqlite3'.
-##Необходимо открыть другой файл БД.'''
-##            menu_open_create_db = open_create_db_module_class. \
-##                                  menu_open_create_db(prologue_text)
-##            menu_open_create_db.show()  # Закрывает данное меню
-##        else:
-##            print('allright')
-            
-            # Расшифровать файл БД
-##            db_path_suffix = Path(db_aes_path).suffix
-##            db_path_encrypted = Path(db_aes_path).with_name('db_decrypted'). \
-##                                with_suffix(db_path_suffix)
-##            crypta_.decrypt_file(db_aes_path, db_path_encrypted)
-            # Подключение к БД и получения курсора
-##            conn = sqlite3.connect(db_path_encrypted)
-##            cur = conn.cursor()
-            # Вызов основного меню
-##            main_menu = main_menu_class.MainMenu(cur)
-            
-            
-            # Зашифровать файл БД
-##            crypta_.encrypt_file(db_path_encrypted, db_aes_path)
-##            return
 
 if __name__ == '__main__':
-    main()
+    app = main()

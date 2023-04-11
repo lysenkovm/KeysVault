@@ -1,12 +1,11 @@
 from common import *
-import open_create_db_module as ocdb_module
 from pathlib import Path
 import sqlite3
 from cmenu_ import *
-import mmenu_db_module as mmenu
+import mmenu_module
 
 
-class Application:
+class Application(mmenu_module.Application):
     
     def __init__(self):
         self.settings = Settings(self)
@@ -162,33 +161,6 @@ class Application:
                 db.from_close_connection_to_exit(('close', 'encrypt', 'remove'))
                 return True, db_aes_path
 
-    def main_menu(self):
-        title = 'Основное меню'
-        prologue = 'Управление паролями'
-        menu = CMenu(self, title, prologue, exit_item=False)
-        menu.add_item('Выборка записей', 1, self.selection)
-        menu.add_item('Действия с записью', 2, self.entry_managing)
-        menu.add_item('Сменить БД', 3, self.open_create_db)
-        menu.add_item('Завершить работу с программой', 4,
-                      self.db.from_close_connection_to_exit,
-                      (('close', 'encrypt', 'remove', 'exit'),))
-        menu_result = menu.show()
-
-    
-    def selection(self):
-        title = 'Выборка записей'
-        prologue = 'Вывод списка записей по параметрам'
-        menu = CMenu(self, title, prologue, exit_item=False)
-        menu.add_item('Логин', 1, self.selection)
-        menu.add_item('Действия с записью', 2, self.entry_managing)
-        menu.add_item('Сменить БД', 3, self.open_create_db)
-        menu.add_item('Завершить работу с программой', 4,
-                                     self.db.exit_app)
-        if menu.show() == '_back_':
-            self.db.exit_app()
-
-    def entry_managing(self):
-        pass
     
 # Открытие фБД через исключения
 def main():

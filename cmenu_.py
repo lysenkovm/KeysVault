@@ -55,7 +55,6 @@ def get_answer(text, answer_checker,
         if cue:
             return '_back_'
         # Проверка ответа функцией 'answer_checker'
-        print('answer', answer)
         check_status, error_text = answer_checker(answer)
         # Если ответ прошёл проверку функцией
         if check_status:
@@ -107,8 +106,12 @@ class CMenu:
     # => cmenu_.CMenuItem.func(*CMenuItem.args=())
     def show(self):
         # Добавить элемент выхода из программы!
-        if not tuple(filter(lambda x: x.text == '_exit_', self.items)):
+        if self.exit_item and not tuple(filter(
+                  lambda x: x.text == '_exit_', self.items)):
             self.add_exit_item()
+        if self.back_item and not tuple(filter(
+                  lambda x: x.text == '_back_', self.items)):
+            self.add_back_item()
         # Вывод меню через вывод элементов и 'enframe()'
         print(self)
         # Возврат результата Вызова метода запроса ввода пользователя
@@ -120,13 +123,22 @@ class CMenu:
     def __str__(self):
         menu_str = ''
         menu_str += self.title + '\n\n'
+        if self.prologue:
+            menu_str += self.prologue + '\n'
         items_str = '\n'.join([str(item) for item in self.items])
         menu_str += items_str + '\n\n'
-        menu_str += self.prologue
+        if self.epilogue:
+            menu_str += self.epilogue
         return enframe(menu_str)
 
     def add_item(self, text, num, func, args=()):
         self.items.append(CMenuItem(self.parent, text, num, func, args))
+
+
+    def add_back_item(self):
+        back_num = len(self.items) + 1
+        self.items.append(CMenuItem(self.parent, '_back_', str(back_num)))
+
 
     def add_exit_item(self):
         exit_num = len(self.items) + 1
@@ -140,6 +152,10 @@ class CMenu:
         answer = input('Ввод: ')
         item_selected = list(filter(lambda item: item.num ==
                              answer, self.items))[0]
+        if item_selected.text == '_back_':
+            return '_back_'
         # cmenu_.CMenuItem.launch_func() => # => cmenu_.CMenuItem.func(*CMenuItem.args=())
         return item_selected.launch_func()  # Например, select_db_path() из open_create_db_module.py
 
+    def set_epilogue(self, epilogue):
+        self.epilogue = epilogue

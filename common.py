@@ -5,6 +5,7 @@ import getpass
 import sqlite3
 import inspect
 import fileinput
+import datetime as dt
 # import os
 from cmenu_ import *
 
@@ -146,6 +147,36 @@ class DBFile:
               self.db_aes_path.stem + '_decr')
         self.cursor = self.connection = None
         self.app = app
+
+    def make_insert(self, data_to_insert):
+        nowtime = dt.datetime.now().strftime('%Y.%m.%d / %H:%M:%S')
+        request = f'''INSERT INTO actual
+(resource, login, password, description, create_dt)
+VALUES ("{data_to_insert['resource']}", "{data_to_insert['login']}",
+"{data_to_insert['password']}", "{data_to_insert['description']}",
+"{nowtime}");'''
+        self.cursor.execute(request)
+        # Вывод результатов
+        result_data = self.cursor.fetchall()
+
+        self.connection.commit()
+
+
+    def make_select(self, selected):
+        request_select_part = f'''SELECT * FROM actual'''
+        selected_true = list(filter(lambda item: item[1],
+                                         selected.items()))
+        if selected_true:
+            request_where_part = 'WHERE ' + \
+                                 ' AND '.join([f'{k} = "{v}"' for
+                                               k, v in selected_true])
+        else:
+            request_where_part = ''
+        request = request_select_part + '\n' + request_where_part + ';'
+        print(request)
+        self.cursor.execute(request)
+        app_message('db', self.cursor.fetchall())
+
 
     # Декодирование ф_БД
     # common.DBFile.decrypt_file() => (True, ''), (False, error)

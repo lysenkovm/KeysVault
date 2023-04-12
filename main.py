@@ -28,8 +28,15 @@ class Application(mmenu_module.Application):
                 print(open_db_result[1])
                 open_db_result = self.open_db(self.open_create_db()[1])
             # При завершении цикла из консоли будет доступ к объекту 'app'
+        self.db.backup_db_aes()
         while True:
-            self.main_menu()
+            # Защита фБД от случайного завершения программы
+            try:
+                self.main_menu()
+            except Exception as error:
+                exit_args = ('close', 'encrypt', 'remove')
+                self.db.from_close_connection_to_exit(exit_args)
+                raise(error)
 
     # main_alter.Application.open_db() => (False, str)
     # / (False, error)

@@ -8,6 +8,8 @@ import fileinput
 import datetime as dt
 # import os
 from cmenu_ import *
+from tabulate import tabulate
+import shutil
 
 
 
@@ -32,9 +34,28 @@ DB_LOAD_STAGES_MESSAGES = [CF_EXISTS_ERROR, CF_DB_AES_PATH_KEY_ERROR,
                            CF_DB_AES_PATH_VAL_ERROR, DB_AES_PASSWORD_ERROR,
                            DB_SQLITE3_ERROR]
 
+SIMPLE_INPUT_ERROR = 'Введено неверное значение. Повторите ввод.'
+
 RESTRICTED_PATH_SYMBOLS = set("'*+,;<=>?[]|«")
 TABLE_STRUCTURE = open(r'./file_format.txt', 'rt').read().strip()
-
+DB_TABLES_COLUMNS_NAMES = {'actual': ['password_id', 'resource',
+                                      'login', 'password',
+                                      'description', 'create_dt'],
+                           'archive': ['password_id', 'resource', 'login',
+                                       'password', 'description',
+                                       'created_dt', 'archived_dt']}
+ATTRIBUTES_NAMES_EN_RU = {'resource':
+                              {'rod': 'ресурса',
+                               'vin': 'название ресурса'},
+                          'login':
+                              {'rod': 'логина',
+                               'vin': 'логин'},
+                          'description':
+                              {'rod': 'описания',
+                               'vin': 'текст описания'},
+                          'password':
+                              {'rod': 'пароля',
+                               'vin': 'пароль'}}
 
 
 def info(func):
@@ -148,37 +169,54 @@ class DBFile:
         self.cursor = self.connection = None
         self.app = app
 
-    def make_insert(self, data_to_insert):
-        nowtime = dt.datetime.now().strftime('%Y.%m.%d / %H:%M:%S')
-        request = f'''INSERT INTO actual
-(resource, login, password, description, create_dt)
-VALUES ("{data_to_insert['resource']}", "{data_to_insert['login']}",
-"{data_to_insert['password']}", "{data_to_insert['description']}",
-"{nowtime}");'''
-        self.cursor.execute(request)
-        # Вывод результатов
-        result_data = self.cursor.fetchall()
+    def backup_db_aes(self):
+        app_message('app', 'Создается резервная копия файла БД')
+        shutil.copy(self.db_aes_path, self.db_aes_path.
+                    with_stem(self.db_aes_path.stem + '_backup'))
 
+
+    def make_insert(self, table_name, data_to_insert):
+        attributes_list = ', '.join(DB_TABLES_COLUMNS_NAMES[table_name][1:])
+        values_list = ', '.join(['\"' + data_to_insert[k] + '\"' for k in
+                                 DB_TABLES_COLUMNS_NAMES[table_name][1:]])
+        request = f'''INSERT INTO {table_name} ({attributes_list})
+VALUES ({values_list});'''
+        print(request)  # test
+        self.cursor.execute(request)
         self.connection.commit()
 
 
-    def make_select(self, selected):
-        request_select_part = f'''SELECT * FROM actual'''
+    def archive_entry(self, entry):
+        data_to_insert = dict(zip(DB_TABLES_COLUMNS_NAMES['actual'][1:], entry[1:]))
+        data_to_insert['created_dt'] = data_to_insert['create_dt']
+        data_to_insert['archived_dt'] = dt.datetime.now().strftime('%Y.%m.%d / %H:%M:%S')
+        self.make_insert('archive', data_to_insert)
+        self.delete_entry('actual', 'password_id', entry[0])
+
+
+    def delete_entry(self, table_name, attribute_name, attribute_value):
+        request = f'''DELETE FROM '{table_name}' WHERE
+{attribute_name} = '{attribute_value}';'''
+        self.cursor.execute(request)
+        self.connection.commit()
+
+
+    def make_select(self, selected, table_name):
+        request_select_part = f'''SELECT * FROM {table_name}'''
         selected_true = list(filter(lambda item: item[1],
                                          selected.items()))
         if selected_true:
             request_where_part = 'WHERE ' + \
-                                 ' AND '.join([f'{k} = "{v}"' for
+                                 ' AND '.join([f'{k} LIKE "{v}"' for
                                                k, v in selected_true])
         else:
             request_where_part = ''
         request = request_select_part + '\n' + request_where_part + ';'
-        print(request)
         self.cursor.execute(request)
-        app_message('db', self.cursor.fetchall())
+        return self.cursor.fetchall()
 
 
-    # Декодирование ф_БД
+    # Декодирование фБД
     # common.DBFile.decrypt_file() => (True, ''), (False, error)
     def decrypt_file(self):
         src = self.db_aes_path

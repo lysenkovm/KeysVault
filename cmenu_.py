@@ -33,7 +33,7 @@ def get_answer(text, answer_checker,
     while True:
         # 0
         # Вывести приглашение для ввода (вопрос)
-        app_message('app', text, 'Возврат - "escape"')
+        app_message('app', text, '\nВозврат - "escape"')
 
         # 1
         # Сигнальная метка выхода из цикла запроса ввода пользователя

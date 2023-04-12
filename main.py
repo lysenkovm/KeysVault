@@ -1,6 +1,5 @@
 from common import *
 from pathlib import Path
-import sqlite3
 from cmenu_ import *
 import mmenu_module
 
@@ -33,7 +32,13 @@ class Application(mmenu_module.Application):
             # Защита фБД от случайного завершения программы
             try:
                 self.main_menu()
+            except KeyboardInterrupt as error:
+                print('Исключение перехвачено')
+                exit_args = ('close', 'encrypt', 'remove')
+                self.db.from_close_connection_to_exit(exit_args)
+                raise(error)
             except Exception as error:
+                print('Исключение перехвачено')
                 exit_args = ('close', 'encrypt', 'remove')
                 self.db.from_close_connection_to_exit(exit_args)
                 raise(error)

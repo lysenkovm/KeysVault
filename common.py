@@ -6,12 +6,8 @@ import sqlite3
 import inspect
 import fileinput
 import datetime as dt
-# import os
 from cmenu_ import *
-from tabulate import tabulate
 import shutil
-
-
 
 
 CF_EXISTS_ERROR = ('Конфигурационный файл "settings.cfg" не найден',

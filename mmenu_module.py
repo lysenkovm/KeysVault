@@ -1,8 +1,6 @@
-from pathlib import Path
-from cmenu_ import *
 from common import *
-import sqlite3
 import pyperclip
+from tabulate import tabulate
 
 
 class Application:

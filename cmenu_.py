@@ -1,5 +1,6 @@
 import sys
 import keyboard
+import os
 
 
 def app_message(title_type, *args, **kwargs):
@@ -105,6 +106,7 @@ class CMenu:
     # => cmenu_.CMenuItem.launch_func()
     # => cmenu_.CMenuItem.func(*CMenuItem.args=())
     def show(self):
+        os.system('cls')
         # Добавить элемент выхода из программы!
         if self.exit_item and not tuple(filter(
                   lambda x: x.text == '_exit_', self.items)):
@@ -150,9 +152,6 @@ class CMenu:
     # => cmenu_.CMenuItem.func(*CMenuItem.args=())
     def ask(self):
         answer = input('Ввод: ')
-        print('Исключение перехвачено')
-        exit_args = ('close', 'encrypt', 'remove')
-        self.parent.db.from_close_connection_to_exit(exit_args)
         item_selected = list(filter(lambda item: item.num ==
                              answer, self.items))[0]
         if item_selected.text == '_back_':
